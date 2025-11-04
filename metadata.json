@@ -1,0 +1,5 @@
+{
+  "name": "VideoMaster AI",
+  "description": "Uma aplicação web que utiliza IA para aprimorar vídeos, gerar legendas, títulos, descrições e hashtags automaticamente.",
+  "requestFramePermissions": []
+}
