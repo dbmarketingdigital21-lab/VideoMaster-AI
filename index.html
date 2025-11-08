@@ -69,7 +69,7 @@
                       </svg>
                       <div id="dropzone-text">
                          <p class="mb-2 text-sm text-blue-300"><span class="font-semibold">Clique para enviar</span> ou arraste e solte</p>
-                         <p class="text-xs text-blue-400">MP4, MOV ou WEBM (Máx 10MB)</p>
+                         <p class="text-xs text-blue-400">MP4, MOV ou WEBM (Máx 8MB)</p>
                       </div>
                       <p id="file-name-display" class="font-semibold text-green-400" style="display: none;"></p>
                    </div>
@@ -129,11 +129,13 @@
 
           <!-- PROCESSING STEP -->
           <div id="processing-step" class="flex flex-col items-center justify-center p-8 animate-fade-in min-h-[400px]" style="display: none;">
-              <h2 class="text-2xl font-bold text-yellow-400 mb-6">Processando seu vídeo</h2>
-              <div id="processing-steps-container" class="w-full max-w-md space-y-4">
-                  <!-- Steps will be injected here by JS -->
+              <div id="processing-content">
+                <h2 class="text-2xl font-bold text-yellow-400 mb-6 text-center">Processando seu vídeo</h2>
+                <div id="processing-steps-container" class="w-full max-w-md space-y-4">
+                    <!-- Steps will be injected here by JS -->
+                </div>
+                <p id="processing-message" class="mt-8 text-blue-300 text-center">Isso pode levar alguns instantes. Estamos usando a magia da IA!</p>
               </div>
-              <p class="mt-8 text-blue-300">Isso pode levar alguns instantes. Estamos usando a magia da IA!</p>
           </div>
           
           <!-- RESULTS STEP -->
@@ -222,6 +224,18 @@
     <script type="module">
       import { GoogleGenAI, Type } from '@google/genai';
 
+      // --- CRITICAL API KEY CHECK ---
+      if (!process.env.API_KEY) {
+          const mainContent = document.getElementById('main-content');
+          mainContent.innerHTML = `
+              <div class="bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded-lg text-center">
+                  <h3 class="font-bold text-lg">Erro de Configuração Crítico</h3>
+                  <p>A chave de API para conectar com a IA não foi encontrada. A aplicação não pode funcionar. Verifique se a aplicação foi implantada corretamente no ambiente de produção.</p>
+              </div>
+          `;
+          throw new Error("API Key is missing. Halting execution.");
+      }
+      
       // --- STATE MANAGEMENT ---
       const AppState = {
         UPLOAD: 'UPLOAD',
@@ -255,6 +269,7 @@
       const nextStepButton = document.getElementById('next-step-button');
       const qualityOptionButtons = document.querySelectorAll('.quality-option');
       const analyzeButton = document.getElementById('analyze-button');
+      const processingContent = document.getElementById('processing-content');
       const processingStepsContainer = document.getElementById('processing-steps-container');
       const videoPreview = document.getElementById('video-preview');
       const videoTrack = document.getElementById('video-track');
@@ -295,7 +310,7 @@
             model: MODEL_NAME,
             contents: {
               parts: [
-                { text: `Você receberá um vídeo. Sua primeira e mais importante tarefa é transcrever o áudio do vídeo com precisão para o português. Depois de ter a transcrição completa, use-a para gerar o seguinte conteúdo otimizado para redes sociais (YouTube, Instagram, TikTok). **Sua tarefa é retornar um objeto JSON com os seguintes campos:** - "title": Um título atrativo e curto (máximo 70 caracteres). - "description": Uma descrição completa e otimizada para SEO (entre 200 e 300 palavras), usando parágrafos. - "hashtags": Uma lista com exatamente 10 hashtags relevantes em formato de array de strings (ex: ["#hashtag1", "#hashtag2"]). - "subtitles": A transcrição completa do áudio, formatada como um arquivo de legendas WebVTT (VTT). **IMPORTANTE: Divida as legendas em frases curtas e dinâmicas, como as vistas em Instagram Reels ou TikTok, para uma melhor experiência de visualização.** O formato deve seguir estritamente o padrão VTT, incluindo timestamps. Exemplo de formato:\nWEBVTT\n\n00:00:01.500 --> 00:00:03.000\nAprimore seus vídeos\n\n00:00:03.200 --> 00:00:05.100\ncom o poder da IA.` },
+                { text: `Você receberá um vídeo. Sua primeira e mais importante tarefa é transcrever o áudio do vídeo com precisão para o português. Depois de ter a transcrição completa, use-a para gerar o seguinte conteúdo otimizado para redes sociais (YouTube, Instagram, TikTok). **Sua tarefa é retornar um objeto JSON com os seguintes campos:** - "title": Um título atrativo e curto (máximo 70 caracteres). - "description": Uma descrição completa e otimizada para SEO (entre 150 e 200 palavras), usando parágrafos. - "hashtags": Uma lista com 5 a 8 hashtags relevantes em formato de array de strings (ex: ["#hashtag1", "#hashtag2"]). - "subtitles": A transcrição completa do áudio, formatada como um arquivo de legendas WebVTT (VTT). **IMPORTANTE: Divida as legendas em frases curtas e dinâmicas, como as vistas em Instagram Reels ou TikTok, para uma melhor experiência de visualização.** O formato deve seguir estritamente o padrão VTT, incluindo timestamps. Exemplo de formato:\nWEBVTT\n\n00:00:01.500 --> 00:00:03.000\nAprimore seus vídeos\n\n00:00:03.200 --> 00:00:05.100\ncom o poder da IA.` },
                 videoPart
               ],
             },
@@ -319,14 +334,21 @@
           parsedContent.hashtags = parsedContent.hashtags.map(tag => tag.startsWith('#') ? tag : `#${tag}`);
           return parsedContent;
         } catch (error) {
-          console.error('Error calling Gemini API:', error);
-          if (error.toString().includes("400")) {
-              throw new Error('Requisição inválida. O formato do vídeo pode não ser suportado ou o arquivo está corrompido.');
-          }
-          if (error.toString().includes("size")) {
-              throw new Error('O arquivo de vídeo é muito grande. Por favor, use um arquivo menor que 10MB.');
-          }
-          throw new Error('Falha ao comunicar com a IA. Verifique sua conexão ou tente novamente mais tarde.');
+            console.error('Error calling Gemini API:', error);
+            let userMessage = 'Falha na comunicação com a IA. Isso pode ocorrer com vídeos mais longos ou complexos. Por favor, tente um vídeo menor ou verifique sua conexão.';
+            const errorMessage = error.toString();
+
+            if (errorMessage.includes("API key not valid") || errorMessage.includes("PERMISSION_DENIED")) {
+                userMessage = 'Erro de autenticação: A chave de API é inválida ou não tem permissão. Verifique a configuração do ambiente.';
+            } else if (errorMessage.includes("400")) {
+                userMessage = 'Requisição inválida (Erro 400). O formato do vídeo pode não ser suportado ou o arquivo está corrompido.';
+            } else if (errorMessage.includes("size")) {
+                userMessage = 'O arquivo de vídeo é muito grande. Por favor, use um arquivo menor que 8MB.';
+            } else if (errorMessage.includes("deadline exceeded") || errorMessage.includes("timeout")) {
+                userMessage = 'O tempo de processamento excedeu o limite. O vídeo pode ser muito longo ou complexo. Tente um vídeo mais curto.';
+            }
+            const debugInfo = `<br><br><details class="text-left mt-2"><summary class="cursor-pointer text-xs">Detalhes do Erro</summary><pre class="text-xs whitespace-pre-wrap bg-black/30 p-2 rounded-md">${errorMessage}</pre></details>`;
+            throw new Error(userMessage + debugInfo);
         }
       };
       
@@ -340,6 +362,15 @@
         Object.values(stepElements).forEach(el => el.style.display = 'none');
         if (stepElements[currentAppState]) {
           stepElements[currentAppState].style.display = 'block';
+          if(currentAppState === AppState.PROCESSING) {
+             // Reset processing view
+             processingContent.innerHTML = `
+                <h2 class="text-2xl font-bold text-yellow-400 mb-6 text-center">Processando seu vídeo</h2>
+                <div id="processing-steps-container" class="w-full max-w-md space-y-4"></div>
+                <p id="processing-message" class="mt-8 text-blue-300 text-center">Isso pode levar alguns instantes. Estamos usando a magia da IA!</p>
+             `;
+             startProcessingAnimation();
+          }
         }
       };
       
@@ -411,9 +442,9 @@
             return;
         }
 
-        const maxSize = 10 * 1024 * 1024; // 10 MB
+        const maxSize = 8 * 1024 * 1024; // 8 MB
         if (file.size > maxSize) {
-            showError('O arquivo é muito grande. O tamanho máximo é 10MB.');
+            showError('O arquivo é muito grande. O tamanho máximo é 8MB.');
             return;
         }
         
@@ -445,7 +476,6 @@
         }
         hideError();
         setState(AppState.PROCESSING);
-        startProcessingAnimation();
 
         try {
           generatedContent = await generateVideoMetadata(videoFile);
@@ -453,10 +483,20 @@
           setState(AppState.RESULTS);
         } catch (e) {
           console.error(e);
-          showError(e.message || 'Ocorreu um erro ao processar o vídeo. Tente novamente.');
-          setState(AppState.UPLOAD);
-        } finally {
-            if (processingInterval) clearInterval(processingInterval);
+          if (processingInterval) clearInterval(processingInterval);
+          
+          processingContent.innerHTML = `
+              <div class="bg-red-900/50 border border-red-700 text-red-200 px-4 py-3 rounded-lg text-center animate-fade-in">
+                  <h3 class="font-bold text-lg mb-2">Ocorreu um Erro no Processamento</h3>
+                  <p class="text-sm text-left">${e.message}</p>
+                  <div class="mt-4">
+                      <button id="try-again-button" class="bg-yellow-500 hover:bg-yellow-600 text-[#0a192f] font-bold py-2 px-4 rounded-full transition-colors">Tentar Novamente</button>
+                      <button id="start-over-button" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-full ml-2 transition-colors">Começar de Novo</button>
+                  </div>
+              </div>
+          `;
+          document.getElementById('try-again-button').addEventListener('click', handleQualitySelection);
+          document.getElementById('start-over-button').addEventListener('click', handleReset);
         }
       }
 
@@ -472,6 +512,7 @@
         parsedCues = [];
         
         authorConfirmCheckbox.checked = false;
+        dropzoneFileInput.value = ''; // Reset file input
         fileNameDisplay.style.display = 'none';
         dropzoneText.style.display = 'block';
         videoPreview.src = '';
@@ -483,6 +524,9 @@
       }
       
       function startProcessingAnimation() {
+        const stepsContainer = document.getElementById('processing-steps-container');
+        if (!stepsContainer) return;
+
         const initialSteps = ["Analisando o vídeo..."];
         if (qualityOption !== 'none') {
             initialSteps.push("Melhorando a qualidade do vídeo (simulação)...");
@@ -491,7 +535,7 @@
         const finalSteps = ["Gerando conteúdo para redes sociais...", "Preparando os resultados..."];
         const steps = [...initialSteps, ...finalSteps];
         
-        processingStepsContainer.innerHTML = '';
+        stepsContainer.innerHTML = '';
         steps.forEach(stepText => {
             const stepDiv = document.createElement('div');
             stepDiv.className = 'processing-step-item flex items-center p-3 rounded-lg transition-all duration-500 opacity-40';
@@ -499,11 +543,11 @@
                 <div class="w-6 h-6 mr-4 flex-shrink-0"></div>
                 <span class="text-blue-200">${stepText}</span>
             `;
-            processingStepsContainer.appendChild(stepDiv);
+            stepsContainer.appendChild(stepDiv);
         });
         
         let currentStep = 0;
-        const stepItems = processingStepsContainer.querySelectorAll('.processing-step-item');
+        const stepItems = stepsContainer.querySelectorAll('.processing-step-item');
         
         const updateStep = () => {
             if (currentStep < stepItems.length) {
@@ -511,12 +555,18 @@
                 item.classList.remove('opacity-40');
                 item.classList.add('bg-blue-800/50', 'opacity-100');
                 item.querySelector('div').innerHTML = `<svg class="animate-spin h-6 w-6 text-yellow-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+                if (currentStep > 0) {
+                   const prevItem = stepItems[currentStep - 1];
+                   prevItem.querySelector('div').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
+                }
                 currentStep++;
             } else {
                 clearInterval(processingInterval);
+                stepItems[stepItems.length - 1].querySelector('div').innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`;
             }
         };
 
+        if (processingInterval) clearInterval(processingInterval);
         updateStep();
         processingInterval = setInterval(updateStep, 1800);
       }
