@@ -69,7 +69,7 @@
                       </svg>
                       <div id="dropzone-text">
                          <p class="mb-2 text-sm text-blue-300"><span class="font-semibold">Clique para enviar</span> ou arraste e solte</p>
-                         <p class="text-xs text-blue-400">MP4, MOV ou WEBM (Máx 20MB)</p>
+                         <p class="text-xs text-blue-400">MP4, MOV ou WEBM (Máx 10MB)</p>
                       </div>
                       <p id="file-name-display" class="font-semibold text-green-400" style="display: none;"></p>
                    </div>
@@ -320,7 +320,13 @@
           return parsedContent;
         } catch (error) {
           console.error('Error calling Gemini API:', error);
-          throw new Error('Falha ao gerar metadados do vídeo.');
+          if (error.toString().includes("400")) {
+              throw new Error('Requisição inválida. O formato do vídeo pode não ser suportado ou o arquivo está corrompido.');
+          }
+          if (error.toString().includes("size")) {
+              throw new Error('O arquivo de vídeo é muito grande. Por favor, use um arquivo menor que 10MB.');
+          }
+          throw new Error('Falha ao comunicar com a IA. Verifique sua conexão ou tente novamente mais tarde.');
         }
       };
       
@@ -405,9 +411,9 @@
             return;
         }
 
-        const maxSize = 20 * 1024 * 1024; // 20 MB
+        const maxSize = 10 * 1024 * 1024; // 10 MB
         if (file.size > maxSize) {
-            showError('O arquivo é muito grande. O tamanho máximo é 20MB.');
+            showError('O arquivo é muito grande. O tamanho máximo é 10MB.');
             return;
         }
         
@@ -447,7 +453,7 @@
           setState(AppState.RESULTS);
         } catch (e) {
           console.error(e);
-          showError('Ocorreu um erro ao processar o vídeo. Tente novamente.');
+          showError(e.message || 'Ocorreu um erro ao processar o vídeo. Tente novamente.');
           setState(AppState.UPLOAD);
         } finally {
             if (processingInterval) clearInterval(processingInterval);
