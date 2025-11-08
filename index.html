@@ -69,7 +69,7 @@
                       </svg>
                       <div id="dropzone-text">
                          <p class="mb-2 text-sm text-blue-300"><span class="font-semibold">Clique para enviar</span> ou arraste e solte</p>
-                         <p class="text-xs text-blue-400">MP4, MOV ou WEBM</p>
+                         <p class="text-xs text-blue-400">MP4, MOV ou WEBM (Máx 20MB)</p>
                       </div>
                       <p id="file-name-display" class="font-semibold text-green-400" style="display: none;"></p>
                    </div>
@@ -272,7 +272,7 @@
       const resetBtn = document.getElementById('reset-btn');
 
       // --- GEMINI SERVICE ---
-      const MODEL_NAME = 'gemini-2.5-pro';
+      const MODEL_NAME = 'gemini-2.5-flash';
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
       const fileToGenerativePart = (file) => {
@@ -397,6 +397,20 @@
 
       // --- EVENT HANDLERS ---
       function handleFileChange(file) {
+        if (!file) return;
+
+        const allowedTypes = ['video/mp4', 'video/quicktime', 'video/webm'];
+        if (!allowedTypes.includes(file.type)) {
+            showError('Tipo de arquivo inválido. Por favor, envie um arquivo MP4, MOV ou WEBM.');
+            return;
+        }
+
+        const maxSize = 20 * 1024 * 1024; // 20 MB
+        if (file.size > maxSize) {
+            showError('O arquivo é muito grande. O tamanho máximo é 20MB.');
+            return;
+        }
+        
         videoFile = file;
         hideError();
         if (videoUrl) URL.revokeObjectURL(videoUrl);
